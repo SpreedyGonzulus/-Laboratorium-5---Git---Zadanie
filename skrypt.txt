@@ -55,4 +55,4 @@ systemctl restart sshd
 # Wyczyszczenie
 unset username
 
-echo "Proces utwardzania zakończony."
+echo "Proces utwardzania zakończony :))."
