@@ -1,0 +1,58 @@
+#!/bin/bash
+
+sudo ufw limit 22/tcp  
+sudo ufw allow 80/tcp  
+sudo ufw allow 443/tcp  
+sudo ufw default deny incoming  
+sudo ufw default allow outgoing
+sudo ufw enable
+
+# Sprawdzanie uprawnień
+if [ "$EUID" -ne 0 ]; then
+  echo "Uruchom skrypt jako root"
+  exit
+fi
+
+# Tworzenie użytkownika z uprawnieniami administratora
+echo "Tworzenie użytkownika z uprawnieniami sudo..."
+read -p "Podaj nazwę nowego użytkownika: " username
+sudo adduser "$username"
+sudo usermod -aG sudo "$username"
+
+# Wymuszenie złożoności hasła
+echo "Konfigurowanie wymagań dotyczących haseł..."
+sudo apt update
+sudo apt install -y libpam-pwquality
+cat <<EOT | sudo tee -a /etc/security/pwquality.conf
+minlen = 10
+ucredit = -1
+lcredit = -1
+dcredit = -1
+EOT
+
+# Automatyczne tworzenie i szyfrowanie katalogów użytkowników
+echo "Konfigurowanie automatycznego tworzenia i szyfrowania katalogów domowych..."
+sudo apt install -y ecryptfs-utils
+cat <<EOT | sudo tee -a /etc/pam.d/common-session
+session optional pam_mkhomedir.so skel=/etc/skel/ umask=077
+EOT
+chmod 700 /home
+
+# Szyfrowanie katalogu domowego użytkownika
+echo "Szyfrowanie katalogu domowego nowego użytkownika..."
+sudo adduser --encrypt-home "$username"
+
+# Włączenie automatycznych aktualizacji
+echo "Włączanie automatycznych aktualizacji..."
+sudo apt install -y unattended-upgrades
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+
+# Wyłączenie dostępu root przez SSH
+echo "Wyłączanie dostępu root przez SSH..."
+sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+systemctl restart sshd
+
+# Wyczyszczenie
+unset username
+
+echo "Proces utwardzania zakończony."
